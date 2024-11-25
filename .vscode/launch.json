@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/runner/main.py",
             "console": "integratedTerminal",
-            "cwd": "${fileDirname}",
+            "cwd": "${workspaceFolder}/runner/",
             "justMyCode": true,
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
