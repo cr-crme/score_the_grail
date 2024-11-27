@@ -16,5 +16,17 @@
                 "PYTHONPATH": "${workspaceFolder}"
             }
         },
+        {
+            "name": "GUI",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/runner/gui.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/runner/",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
     ]
 }
