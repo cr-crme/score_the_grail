@@ -1,11 +1,12 @@
 from typing import Callable
+from pathlib import Path
 
 import flet as ft
 
 from ..models.style import title_style
 
 
-def select_file_widget(page: ft.Page, callback: Callable[[str], None]) -> ft.Column:
+def select_file_widget(page: ft.Page, callback: Callable[[str], None]) -> ft.Control:
     """
     Select a normalized file widget, including the Title, Text, and Icon Button
 
@@ -18,24 +19,31 @@ def select_file_widget(page: ft.Page, callback: Callable[[str], None]) -> ft.Col
 
     Returns
     -------
-    ft.Column
+    ft.Control
         The select file widget
     """
 
-    select_file_title = ft.Text("Select a normalized file (.csv)", style=title_style)
+    title = ft.Text("Select a normalized file (.csv)", style=title_style)
     selected_file_text = ft.Text(value="No file selected")
     pick_file_dialog = _file_picker_dialog(
-        page=page, on_result=lambda e: _update_text(text=selected_file_text, value=e.files[0].path, callback=callback)
+        page=page,
+        on_result=lambda e: _update_selected_file_text(
+            text=selected_file_text, file_path=e.files[0].path, callback=callback
+        ),
     )
     pick_file_icon_button = ft.IconButton(
-        icon=ft.icons.UPLOAD_FILE, on_click=lambda _: pick_file_dialog.pick_files(allow_multiple=False)
+        icon=ft.icons.UPLOAD_FILE,
+        on_click=lambda _: pick_file_dialog.pick_files(
+            initial_directory=Path.cwd() / "data",
+            allow_multiple=False,
+        ),
     )
 
     return ft.Column(
         alignment=ft.MainAxisAlignment.CENTER,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         controls=[
-            select_file_title,
+            title,
             ft.Row(
                 alignment=ft.MainAxisAlignment.CENTER,
                 controls=[
@@ -48,13 +56,14 @@ def select_file_widget(page: ft.Page, callback: Callable[[str], None]) -> ft.Col
 
 
 # Pick files dialog
-def _update_text(text: ft.Text, value: str, callback: Callable[[str], None]) -> None:
+def _update_selected_file_text(text: ft.Text, file_path: str, callback: Callable[[str], None]) -> None:
     """
     Update the text widget with the new value and call the callback function
     """
-    text.value = value
+    # Remove the Path.cwd() prefix of the file path
+    text.value = file_path.replace(f"{Path.cwd()}/", "")
     text.update()
-    callback(value)
+    callback(file_path)
 
 
 def _file_picker_dialog(page: ft.Page, on_result: Callable[[ft.FilePickerResultEvent], None]) -> ft.FilePicker:
@@ -70,7 +79,7 @@ def _file_picker_dialog(page: ft.Page, on_result: Callable[[ft.FilePickerResultE
 
     Returns
     -------
-    ft.FilePicker
+    ft.Control
         The file picker
     """
     pick_file_dialog = ft.FilePicker(on_result=on_result)

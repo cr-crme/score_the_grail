@@ -103,12 +103,7 @@ class KinematicData:
         map = self.map(normative_data=normative_data)
         map_left = map.left.data.mean(axis=1).to_numpy()[None, :]
         map_right = map.right.data.mean(axis=1).to_numpy()[None, :]
-        return KinematicData(
-            data=pd.DataFrame(
-                np.concatenate([map_left, map_right]).T,
-                columns=["left", "right"],
-            )
-        )
+        return KinematicData(data=pd.DataFrame(np.concatenate([map_left, map_right]).T, columns=["left", "right"]))
 
     @property
     def has_steps(self) -> bool:
