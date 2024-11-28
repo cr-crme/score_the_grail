@@ -1,5 +1,6 @@
-from typing import Callable
+import os
 from pathlib import Path
+from typing import Callable
 
 import flet as ft
 
@@ -61,7 +62,7 @@ def _update_selected_file_text(text: ft.Text, file_path: str, callback: Callable
     Update the text widget with the new value and call the callback function
     """
     # Remove the Path.cwd() prefix of the file path
-    text.value = file_path.replace(f"{Path.cwd()}/", "")
+    text.value = file_path.replace(f"{Path.cwd()}{os.sep}", "").replace(os.sep, "/")
     text.update()
     callback(file_path)
 
