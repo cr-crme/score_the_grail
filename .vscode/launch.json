@@ -5,18 +5,6 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Main",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/runner/main.py",
-            "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/runner/",
-            "justMyCode": true,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}"
-            }
-        },
-        {
             "name": "GUI",
             "type": "debugpy",
             "request": "launch",
@@ -28,5 +16,30 @@
                 "PYTHONPATH": "${workspaceFolder}"
             }
         },
+        {
+            "name": "GUI to executable",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/runner/gui_to_executable.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/runner/",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Console",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/runner/console.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/runner/",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        
     ]
 }
