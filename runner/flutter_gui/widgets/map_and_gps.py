@@ -23,7 +23,7 @@ def map_and_gps_widget(listener: GenericCallback) -> ft.Control:
     title = ft.Text("The MAP and GPS scores", style=title_style)
 
     map_score_subtitle = ft.Text(value="MAP", style=title_style, text_align=ft.TextAlign.RIGHT)
-    map_score_text_dof_title = ft.Text(value="DoF", style=subtitle_style, text_align=ft.TextAlign.LEFT)
+    map_score_text_dof_title = ft.Text(value="Segment/Plane", style=subtitle_style, text_align=ft.TextAlign.LEFT)
     map_score_text_left_title = ft.Text(value="Left", style=subtitle_style, text_align=ft.TextAlign.RIGHT)
     map_score_text_right_title = ft.Text(value="Right", style=subtitle_style, text_align=ft.TextAlign.RIGHT)
     map_score_text_dof_data = ft.Text(value="", text_align=ft.TextAlign.LEFT)
@@ -129,10 +129,10 @@ def _on_file_changed(
     map_dof = ""
     map_value_left = ""
     map_value_right = ""
-    for dof, d in zip(KinematicData.channels_to_analyse, map.data.to_numpy().reshape(-1, 2)):
+    for dof, left, right in zip(map.channel_names, map.left.data, map.right.data):
         map_dof += f"{dof}\n"
-        map_value_left += f"{d[0]:.3f}\n"
-        map_value_right += f"{d[1]:.3f}\n"
+        map_value_left += f"{left:.3f}\n"
+        map_value_right += f"{right:.3f}\n"
 
     map_score_text_dof.value = map_dof
     map_score_text_dof.update()
@@ -144,7 +144,7 @@ def _on_file_changed(
     # 3 digits after the decimal point
     gps_score_text_dof.value = f"Total"
     gps_score_text_dof.update()
-    gps_score_text_left.value = f"{gps.data["left"][0]:.3f}"
+    gps_score_text_left.value = f"{gps.left.data:.3f}"
     gps_score_text_left.update()
-    gps_score_text_right.value = f"{gps.data["right"][0]:.3f}"
+    gps_score_text_right.value = f"{gps.right.data:.3f}"
     gps_score_text_right.update()
