@@ -10,10 +10,10 @@ def main():
     )
     kd_normative = KinematicData.from_normative_data(file=NormativeData.CROUCHGAIT)
 
-    # from matplotlib import pyplot as plt
+    from matplotlib import pyplot as plt
 
-    # plt.plot(kd_exported_normalized.right["KneeFlex"].right.data)
-    # plt.show()
+    plt.plot(kd_exported_normalized.right["KneeFlex"].right.data)
+    plt.show()
 
     gps = kd_exported_normalized.gps(normative_data=NormativeData.CROUCHGAIT)
     print(gps.data)
