@@ -241,6 +241,7 @@ class KinematicData:
         """
 
         raw_data = pd.read_csv(file_path, header=None)
+        # TODO The header count can be arbitrary different
         header_count = 121  # The expected number of elements in the header (supplied over the rows)
 
         # The last value in the third column necessarily contains the total number of steps
@@ -254,6 +255,7 @@ class KinematicData:
         header = raw_data.iloc[:header_count, 1].values
 
         # Now we can reorganize the data into a DataFrame with the headers as columns and steps separated by dimension
+        # TODO step_count can be different on the left and right side
         data = np.array(raw_data.iloc[:, 3:]).T.reshape((101, header_count, step_count, 2), order="F")
 
         # Find the index of the header that correspond to channels to keep
