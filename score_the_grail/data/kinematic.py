@@ -263,8 +263,8 @@ class KinematicData:
             raise ValueError("The left and right channels do not have the same length.")
         header_count = len(left_header_to_keep)
 
-        left_indices_to_keep = [i for i, name in enumerate(header) if name in left_header_to_keep]
-        right_indices_to_keep = [i for i, name in enumerate(header) if name in right_header_to_keep]
+        left_indices_to_keep = [list(header).index(value) for value in left_header_to_keep]
+        right_indices_to_keep = [list(header).index(value) for value in right_header_to_keep]
         if (len(left_indices_to_keep) != header_count) or (len(right_indices_to_keep) != header_count):
             raise ValueError("The CSV file does not contain all the expected channels.")
 
