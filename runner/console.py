@@ -9,13 +9,16 @@ def main():
     )
     kd_normative = KinematicData.from_normative_data(file=NormativeData.CROUCHGAIT)
 
-    # from matplotlib import pyplot as plt
-
-    # plt.plot(kd_exported_normalized.right["KneeFlex"].right.data)
-    # plt.show()
-
     gps = kd_exported_normalized.gps(normative_data=NormativeData.CROUCHGAIT)
-    print(gps.data)
+    print(f"GPS for left side: {gps.left.to_numpy:.3f} and for right side: {gps.right.to_numpy:.3f}")
+
+    from matplotlib import pyplot as plt
+
+    plt.figure("Right side")
+    plt.plot(kd_exported_normalized.right["KneeFlex"].to_numpy)
+    plt.figure("Left side")
+    plt.plot(kd_exported_normalized.left["KneeFlex"].to_numpy)
+    plt.show()
 
 
 if __name__ == "__main__":

@@ -129,7 +129,7 @@ def _on_file_changed(
     map_dof = ""
     map_value_left = ""
     map_value_right = ""
-    for dof, left, right in zip(map.channel_names, map.left.data, map.right.data):
+    for dof, left, right in zip(map.channel_names, map.left.to_numpy, map.right.to_numpy):
         map_dof += f"{dof}\n"
         map_value_left += f"{left:.3f}\n"
         map_value_right += f"{right:.3f}\n"
@@ -144,7 +144,7 @@ def _on_file_changed(
     # 3 digits after the decimal point
     gps_score_text_dof.value = f"Total"
     gps_score_text_dof.update()
-    gps_score_text_left.value = f"{gps.left.data:.3f}"
+    gps_score_text_left.value = f"{gps.left.to_numpy:.3f}"
     gps_score_text_left.update()
-    gps_score_text_right.value = f"{gps.right.data:.3f}"
+    gps_score_text_right.value = f"{gps.right.to_numpy:.3f}"
     gps_score_text_right.update()

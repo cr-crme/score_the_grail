@@ -32,13 +32,24 @@ def _channels_map() -> dict[str, tuple[str]]:
 
 class KinematicData:
 
-    def __init__(self, data: np.ndarray, channel_names: tuple[str], side_names: tuple[str]) -> None:
-        if data.ndim != 4:
-            raise ValueError("The data must be a 4D array (time, channel, step, side).")
+    def __init__(self, data: dict[str, np.ndarray], channel_names: tuple[str]) -> None:
+        """
+        Create a new KinematicData object.
+
+        Parameters
+        ----------
+        data : dict[str, np.ndarray]
+            The kinematic data (time, channel, step) for the sides (str).
+        channel_names : tuple[str]
+            The names of the channels.
+
+        """
+        for value in data.values():
+            if value.ndim != 3:
+                raise ValueError("The data must be a 3D array (time, channel, step).")
 
         self._data = data
         self._channel_names = channel_names
-        self._side_names = side_names
 
     def keys(self) -> list:
         """
@@ -83,15 +94,21 @@ class KinematicData:
         """
         map = self.map(normative_data=normative_data)
         return KinematicData(
-            data=map._data.mean(axis=1)[:, None, :, :], channel_names=["gps"], side_names=self._side_names
+            data={side: map._data[side].mean(axis=1)[:, None, :] for side in map.side_names},
+            channel_names=["gps"],
         )
 
     @property
-    def data(self) -> np.ndarray:
+    def to_numpy(self) -> np.ndarray:
         """
         The kinematic data.
         """
-        return self._data.squeeze()
+        if len(self.side_names) > 1:
+            raise ValueError(
+                "It is not possible to merge the data with more than one side. "
+                "Please call '.left' or '.right' before calling '.to_numpy'."
+            )
+        return self._data[self.side_names[0]].squeeze()
 
     @property
     def channel_names(self) -> tuple[str]:
@@ -105,21 +122,21 @@ class KinematicData:
         """
         The names of the sides.
         """
-        return self._side_names
+        return tuple(self._data.keys())
 
     @property
     def has_steps(self) -> bool:
         """
-        If the data contains multiple steps.
+        If the data contains multiple steps. This is true as soon as at least one side has more than one step.
         """
-        return self._data.shape[2] > 1
+        return sum(data.shape[2] > 1 for data in self._data.values()) > 0
 
     @property
     def has_side(self) -> bool:
         """
         If the data contains both side information.
         """
-        return len(self._side_names) == 2
+        return "left" in self.side_names and "right" in self.side_names
 
     @property
     def mean_time(self) -> Self:
@@ -127,7 +144,8 @@ class KinematicData:
         The mean value for each time step.
         """
         return KinematicData(
-            data=self._data.mean(axis=0)[None, :, :, :], channel_names=self._channel_names, side_names=self._side_names
+            data={side: self._data[side].mean(axis=0)[None, :, :] for side in self.side_names},
+            channel_names=self._channel_names,
         )
 
     @property
@@ -140,7 +158,8 @@ class KinematicData:
             return self
 
         return KinematicData(
-            data=self._data.mean(axis=2)[:, :, None, :], channel_names=self._channel_names, side_names=self._side_names
+            data={side: self._data[side].mean(axis=2)[:, :, None] for side in self.side_names},
+            channel_names=self._channel_names,
         )
 
     @property
@@ -148,7 +167,10 @@ class KinematicData:
         """
         The square root of the data.
         """
-        return KinematicData(data=np.sqrt(self._data), channel_names=self._channel_names, side_names=self._side_names)
+        return KinematicData(
+            data={side: np.sqrt(self._data[side]) for side in self.side_names},
+            channel_names=self._channel_names,
+        )
 
     @property
     def left(self) -> Self:
@@ -178,19 +200,14 @@ class KinematicData:
         KinematicData
             The data for the side.
         """
-        if side not in self._side_names:
-            raise ValueError(f"The side must be in {self._side_names}.")
+        if side not in self.side_names:
+            raise ValueError(f"The side must be in {self.side_names}.")
 
-        # Check if the keys are str or tuple. If they are str, we dont have side information
+        # If we already have only the requested side in the data, no need to do anything apart from returning the data themselves
         if not self.has_side:
             return self
 
-        # Find the indices of the side
-        side_index = self._side_names.index(side)
-
-        return KinematicData(
-            data=self._data[:, :, :, side_index : side_index + 1], channel_names=self._channel_names, side_names=(side,)
-        )
+        return KinematicData(data={side: self._data[side]}, channel_names=self._channel_names)
 
     @classmethod
     def from_csv(cls, file_path: str) -> Self:
@@ -208,12 +225,8 @@ class KinematicData:
             The kinematic data extracted from the file.
         """
         try:
-            data = pd.read_csv(file_path)[list(_channels_map()["all"]["grail_names"])].to_numpy()[:, :, None, None]
-            return cls(
-                data=np.concatenate((data, data), axis=3),
-                channel_names=_channels_map()["all"]["show_names"],
-                side_names=("left", "right"),
-            )
+            data = pd.read_csv(file_path)[list(_channels_map()["all"]["grail_names"])].to_numpy()[:, :, None]
+            return cls(data={"both": data}, channel_names=_channels_map()["all"]["show_names"])
         except KeyError:
             raise ValueError("The CSV file does not contain all the expected columns.")
 
@@ -240,45 +253,37 @@ class KinematicData:
             The kinematic data extracted from the file
         """
 
-        raw_data = pd.read_csv(file_path, header=None)
-        # TODO The header count can be arbitrary different
-        header_count = 121  # The expected number of elements in the header (supplied over the rows)
+        raw_data = pd.read_csv(file_path, header=None).to_numpy()
 
-        # The last value in the third column necessarily contains the total number of steps
-        step_count = int(raw_data.iloc[-1, 2]) + 1  # 0-based index
+        # Find the header from the first step of the left side (assuming all steps follow the same structure)
+        header_count = raw_data[(raw_data[:, 0] == "left") & (raw_data[:, 2] == 0), :].shape[0]
+        header = list(raw_data[:header_count, 1])
 
-        # As a sanity check, the total number of rows should be header_count * step_count * 2 (left and right)
-        if raw_data.shape[0] != header_count * step_count * 2:
-            raise ValueError("The CSV file does not contain the expected number of rows.")
+        data = {}
+        for side in ["left", "right"]:
+            sided_data = raw_data[raw_data[:, 0] == side, :]
 
-        # Extract a piece of the header from the first rows
-        header = raw_data.iloc[:header_count, 1].values
+            # Find the index of the header that correspond to channels to keep
+            header_to_keep = list(_channels_map()["split"][f"grail_names_{side}"])
+            try:
+                header_indices = [header.index(value) for value in header_to_keep]
+            except ValueError:
+                raise ValueError("The CSV file does not contain all the expected channels.")
 
-        # Now we can reorganize the data into a DataFrame with the headers as columns and steps separated by dimension
-        # TODO step_count can be different on the left and right side
-        data = np.array(raw_data.iloc[:, 3:]).T.reshape((101, header_count, step_count, 2), order="F")
+            # The last value in the third column contains the total number of steps, the last value is the number of steps
+            step_count = int(sided_data[-1, 2]) + 1  # 0-based index
 
-        # Find the index of the header that correspond to channels to keep
-        left_header_to_keep = list(_channels_map()["split"]["grail_names_left"])
-        right_header_to_keep = list(_channels_map()["split"]["grail_names_right"])
-        if len(left_header_to_keep) != len(right_header_to_keep):
-            raise ValueError("The left and right channels do not have the same length.")
-        header_count = len(left_header_to_keep)
+            # As a sanity check, the total number of rows should be header_count * step_count
+            if sided_data.shape[0] != header_count * step_count:
+                raise ValueError(f"The CSV file does not contain the expected number of rows for side {side}.")
 
-        left_indices_to_keep = [list(header).index(value) for value in left_header_to_keep]
-        right_indices_to_keep = [list(header).index(value) for value in right_header_to_keep]
-        if (len(left_indices_to_keep) != header_count) or (len(right_indices_to_keep) != header_count):
-            raise ValueError("The CSV file does not contain all the expected channels.")
+            # Now we can reorganize the data into the final format with the headers as columns and steps as 3rd dimension
+            data[side] = np.array(
+                sided_data[:, 3:].T.reshape((101, header_count, step_count), order="F")[:, header_indices, :],
+                dtype=float,
+            )
 
-        # Remove the extra columns
-        left_data = data[:, left_indices_to_keep, :, 0:1]
-        right_data = data[:, right_indices_to_keep, :, 1:2]
-
-        return cls(
-            data=np.concatenate((left_data, right_data), axis=3),
-            channel_names=_channels_map()["split"]["show_names"],
-            side_names=("left", "right"),
-        )
+        return cls(data=data, channel_names=_channels_map()["split"]["show_names"])
 
     @classmethod
     def from_mox(cls, file_path: str) -> Self:
@@ -311,11 +316,10 @@ class KinematicData:
                 )
 
         # Reorganise and reshape the data into a 4D array
-        data = pd.DataFrame(data, columns=header)[channels_to_keep].to_numpy()
-        data = np.concatenate((data[:, :, None, None], data[:, :, None, None]), axis=3)
+        data = pd.DataFrame(data, columns=header)[channels_to_keep].to_numpy()[:, :, None]
 
         try:
-            return cls(data=data, channel_names=_channels_map()["all"]["show_names"], side_names=("left", "right"))
+            return cls(data={"both": data}, channel_names=_channels_map()["all"]["show_names"])
         except KeyError:
             raise ValueError("The MOX file does not contain all the expected channels.")
 
@@ -341,67 +345,67 @@ class KinematicData:
         # The normative file is next to the current file
         with open(Path(__file__).parent / file.value) as f:
             all_lines = f.readlines()
+        all_lines = [line.strip() for line in all_lines]  # Remove the nextline character
 
-        # Remove the nextline character
-        all_lines = [line.strip() for line in all_lines]
+        trial_index = 1  # 1 for the next line after the header index. Should we use mean of all trials?
+        data = {}
+        for side in ["left", "right"]:
+            # Parse the value for the header side
+            header_to_keep = list(_channels_map()["split"][f"grail_names_{side}"])
+            header_indices = [all_lines.index(header) for header in header_to_keep]
 
-        # Parse the value for each header
-        left_header_to_keep = list(_channels_map()["split"]["grail_names_left"])
-        right_header_to_keep = list(_channels_map()["split"]["grail_names_right"])
-        if len(left_header_to_keep) != len(right_header_to_keep):
-            raise ValueError("The left and right channels do not have the same length.")
-        header_count = len(left_header_to_keep)
-
-        data = np.ndarray((101, header_count, 1, 2))  # 0 for the steps, 2 for left and right
-        left_start = all_lines.index("left")
-        right_start = all_lines.index("right")
-        if left_start > right_start:
-            raise ValueError("The normative data file are expected to have left first.")
-        for header_index in range(header_count):
-            # Find all indices of the header (0 being the left and 1 the right, this assumes the data is ordered as such)
-            left_index = [i for i, line in enumerate(all_lines) if line == left_header_to_keep[header_index]][0]
-            right_index = [i for i, line in enumerate(all_lines) if line == right_header_to_keep[header_index]][1]
-
-            # +1 for next line
-            data[:, header_index, 0, 0] = np.array(all_lines[left_index + 1].split(" "), dtype=float)
-            data[:, header_index, 0, 1] = np.array(all_lines[right_index + 1].split(" "), dtype=float)
+            data[side] = np.ndarray((101, len(header_to_keep), 1))  # 1 for the steps
+            for cmp, index in enumerate(header_indices):
+                data[side][:, cmp, 0] = np.array(all_lines[index + trial_index].split(" "), dtype=float)
 
         # Recast the data into a DataFrame
-        return cls(data=data, channel_names=_channels_map()["split"]["show_names"], side_names=("left", "right"))
+        return cls(data=data, channel_names=_channels_map()["split"]["show_names"])
 
     def __getitem__(self, key: str) -> Self:
-        if key not in self.keys():
+        if key not in self.channel_names:
             raise KeyError("The key is not in the data.")
 
-        index = self.keys().index(key)
+        index = self.channel_names.index(key)
         return KinematicData(
-            data=self._data[:, index : index + 1, :, :], channel_names=(key,), side_names=self._side_names
+            data={side: self._data[side][:, index : index + 1, :] for side in self.side_names},
+            channel_names=(key,),
         )
 
     def __add__(self, other: Self) -> Self:
         if not isinstance(other, KinematicData):
             raise TypeError("The other object is not a KinematicData object.")
 
-        if self._data.shape != other._data.shape:
-            raise ValueError("The data shapes are not the same.")
+        for side in self.side_names:
+            if side not in other.side_names:
+                raise ValueError("The data does not contain the same sides.")
+            if self._data[side].shape != other._data[side].shape:
+                raise ValueError(f"The data of side {side} are not the same shapes.")
 
         return KinematicData(
-            data=self._data + other._data, channel_names=self._channel_names, side_names=self._side_names
+            data={side: self._data[side] + other._data[side] for side in self.side_names},
+            channel_names=self._channel_names,
         )
 
     def __sub__(self, other: Self) -> Self:
         if not isinstance(other, KinematicData):
             raise TypeError("The other object is not a KinematicData object.")
 
-        if self._data.shape != other._data.shape:
-            raise ValueError("The data shapes are not the same.")
+        for side in self.side_names:
+            if side not in other.side_names:
+                raise ValueError("The data does not contain the same sides.")
+            if self._data[side].shape != other._data[side].shape:
+                raise ValueError(f"The data of side {side} are not the same shapes.")
 
         return KinematicData(
-            data=self._data - other._data, channel_names=self._channel_names, side_names=self._side_names
+            data={side: self._data[side] - other._data[side] for side in self.side_names},
+            channel_names=self._channel_names,
         )
 
-    def __pow__(self, other: float) -> Self:
-        if not isinstance(other, (int, float)):
-            raise TypeError("The other object is not a number.")
+    def __pow__(self, value: float) -> Self:
+        if not isinstance(value, (int, float)):
+            raise TypeError("The value object is not a number.")
 
-        return KinematicData(data=self._data**other, channel_names=self._channel_names, side_names=self._side_names)
+        return KinematicData(
+            data={side: self._data[side] ** value for side in self.side_names},
+            channel_names=self._channel_names,
+        )
