@@ -2,7 +2,6 @@ from score_the_grail import KinematicData, NormativeData
 
 
 def main():
-    # TODO - Extract the steps from the non-normalized data?
     kd_exported = KinematicData.from_csv("data/pilot/1113-Gait analysis - Balloon animals.csv")
     kd_all = KinematicData.from_mox("data/pilot/1113-Gait analysis - Balloon animals.mox")
     kd_exported_normalized = KinematicData.from_normalized_csv(

@@ -32,12 +32,13 @@ def select_file_widget(page: ft.Page, callback: Callable[[str], None]) -> ft.Con
             text=selected_file_text, file_path=e.files[0].path, callback=callback
         ),
     )
+    initial_folder = Path.cwd() / "data"
+    if not initial_folder.exists():
+        initial_folder = Path.cwd()
+
     pick_file_icon_button = ft.IconButton(
         icon=ft.icons.UPLOAD_FILE,
-        on_click=lambda _: pick_file_dialog.pick_files(
-            initial_directory=Path.cwd() / "data",  # TODO create the data folder if it doesn't exist
-            allow_multiple=False,
-        ),
+        on_click=lambda _: pick_file_dialog.pick_files(initial_directory=initial_folder, allow_multiple=False),
     )
 
     return ft.Column(
