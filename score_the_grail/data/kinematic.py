@@ -177,16 +177,16 @@ class KinematicData:
         """
         The kinematic data for the left side.
         """
-        return self._get_side("left")
+        return self.get_side("left")
 
     @property
     def right(self) -> Self:
         """
         The kinematic data for the right side.
         """
-        return self._get_side("right")
+        return self.get_side("right")
 
-    def _get_side(self, side: str) -> Self:
+    def get_side(self, side: str) -> Self:
         """
         Get the data for a specific side.
 
