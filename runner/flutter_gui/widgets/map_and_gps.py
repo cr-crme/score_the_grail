@@ -123,8 +123,8 @@ def _on_file_changed(
 ) -> None:
     # Compute the MAP and GPS scores from the file path
     kd_exported_normalized = KinematicData.from_normalized_csv(file_path)
-    map = kd_exported_normalized.map(normative_data=NormativeData.CROUCHGAIT)
-    gps = kd_exported_normalized.gps(normative_data=NormativeData.CROUCHGAIT)
+    map = kd_exported_normalized.map(normative_data=NormativeData.NORMAL)
+    gps = kd_exported_normalized.gps(normative_data=NormativeData.NORMAL)
 
     map_dof = ""
     map_value_left = ""

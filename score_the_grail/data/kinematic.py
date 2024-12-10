@@ -21,6 +21,7 @@ def _channels_map() -> dict[str, tuple[str]]:
         "all": {
             "grail_names": tuple(f"Rotation {name}" for name in [*both, *left, *right]),
             "show_names": tuple(f"{name}" for name in [*both, *left, *right]),
+            "normalized_names": tuple(f"Rotation {name}" for name in [*both, *joints]),
         },
         "split": {
             "show_names": tuple(f"{name}" for name in [*both, *joints]),
@@ -57,7 +58,7 @@ class KinematicData:
         """
         return self._channel_names
 
-    def map(self, normative_data: NormativeData = NormativeData.CROUCHGAIT) -> Self:
+    def map(self, normative_data: NormativeData = NormativeData.NORMAL) -> Self:
         """
         Compute the Movement Analysis Profile (root mean square error) for each channel.
 
@@ -78,7 +79,7 @@ class KinematicData:
 
         return ((self.mean_step - norm) ** 2).mean_time.sqrt
 
-    def gps(self, normative_data: NormativeData = NormativeData.CROUCHGAIT) -> Self:
+    def gps(self, normative_data: NormativeData = NormativeData.NORMAL) -> Self:
         """
         Compute the GPS (Gait Profile Score) for each channel.
 
@@ -286,6 +287,47 @@ class KinematicData:
         return cls(data=data, channel_names=_channels_map()["split"]["show_names"])
 
     @classmethod
+    def from_normative_csv(cls, file_path: str) -> Self:
+        """
+        Extract the data provided by MOTEK for the normative data.
+
+        Parameters
+        ----------
+        file_path : str
+            The path to the CSV file containing the kinematic data.
+
+        Returns
+        -------
+        KinematicData
+            The kinematic data extracted from the file.
+        """
+
+        raw_data = pd.read_csv(file_path, header=None).to_numpy()
+        # Replace the headers from "Type Dof SideCycle" to "Type SDof" where S is the side (L or R)
+        header: list[str] = list(raw_data[0, :])
+        generic_header_to_keep = list(_channels_map()["all"]["normalized_names"])
+
+        data = {}
+        for side in ["left", "right"]:
+            # Find the index of the header that correspond to channels to keep for each side
+            header_indices = []
+            for value in generic_header_to_keep:
+                # If the value is in the header, use it already
+                if value in header:
+                    header_indices.append(header.index(value))
+                    continue
+                elif f"{value} {side.capitalize()}Cycle" in header:
+                    # If the value is has a cycle specific value, separate by them
+                    header_indices.append(header.index(f"{value} {side.capitalize()}Cycle"))
+                    continue
+                else:
+                    raise ValueError("The CSV file does not contain all the expected channels.")
+
+            data[side] = np.array(raw_data[1:, header_indices], dtype=float)[:, :, None]
+
+        return cls(data=data, channel_names=_channels_map()["split"]["show_names"])
+
+    @classmethod
     def from_mox(cls, file_path: str) -> Self:
         """
         Extract the data from the MOX file directly output from the GRAIL software.
@@ -324,17 +366,17 @@ class KinematicData:
             raise ValueError("The MOX file does not contain all the expected channels.")
 
     @classmethod
-    def from_normative_data(cls, file: NormativeData) -> Self:
+    def from_txt(cls, file_path: str) -> Self:
         """
-        Create a KinematicData object from the normative data file.
+        Create a KinematicData object from the txt data file.
 
         The data are stored in a "header\n/data1\n/data2\n..." format over rows. The data1 are the actual data. I do not
         know what data2 is for.
 
         Parameters
         ----------
-        file : NormativeData
-            The normative data file to load
+        file_path : str
+            The path to the TXT file containing the kinematic data.
 
         Returns
         -------
@@ -343,7 +385,7 @@ class KinematicData:
         """
 
         # The normative file is next to the current file
-        with open(Path(__file__).parent / file.value) as f:
+        with open(file_path) as f:
             all_lines = f.readlines()
         all_lines = [line.strip() for line in all_lines]  # Remove the nextline character
 
@@ -360,6 +402,25 @@ class KinematicData:
 
         # Recast the data into a DataFrame
         return cls(data=data, channel_names=_channels_map()["split"]["show_names"])
+
+    @classmethod
+    def from_normative_data(cls, file: NormativeData) -> Self:
+        """
+        Create a KinematicData object generating normative data
+
+        Parameters
+        ----------
+        file : NormativeData
+            The normative data file to load
+
+        Returns
+        -------
+        KinematicData
+            The kinematic data extracted from the file
+        """
+
+        # The normative file is next to the current file
+        return file.factory(Path(__file__).parent / file.file_path)
 
     def __getitem__(self, key: str) -> Self:
         if key not in self.channel_names:
