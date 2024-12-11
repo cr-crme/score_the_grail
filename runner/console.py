@@ -11,13 +11,25 @@ def main():
     gps = kd_exported_normalized.gps(normative_data=NormativeData.NORMAL)
     print(f"GPS for left side: {gps.left.to_numpy:.3f} and for right side: {gps.right.to_numpy:.3f}")
 
-    dof_to_plot = "HipFlex"
-    plt.figure("Right side")
-    plt.plot(kd_exported_normalized.right[dof_to_plot].to_numpy, "b")
-    plt.plot(kd_normative.right[dof_to_plot].to_numpy, "k")
-    plt.figure("Left side")
-    plt.plot(kd_exported_normalized.left[dof_to_plot].to_numpy, "b")
-    plt.plot(kd_normative.left[dof_to_plot].to_numpy, "k")
+    plt.figure("Kinematic Data")
+    dofs_to_plot = ["HipFlex", "KneeFlex", "AnkleFlex"]
+    sides = ["left", "right"]
+    for j, dof in enumerate(dofs_to_plot):
+        plt.subplot(len(dofs_to_plot), 1, j + 1)
+        plt.title(dof)
+        plt.axis("off")
+        y_lims = []
+        for i, side in enumerate(sides):
+            plt.subplot(len(dofs_to_plot), 2, 2 * j + i + 1)
+            plt.title(side)
+            plt.plot(kd_exported_normalized.get_side(side)[dof].to_numpy, linestyle="--", color="b")
+            plt.plot(kd_normative.get_side(side)[dof].to_numpy, linestyle="-", color="k")
+            y_lims.append(plt.ylim())
+        new_y_lim = (min([y[0] for y in y_lims]), max([y[1] for y in y_lims]))
+        for i in range(len(sides)):
+            plt.subplot(len(dofs_to_plot), 2, 2 * j + i + 1)
+            plt.ylim(new_y_lim)
+    plt.tight_layout()
     plt.show()
 
 
