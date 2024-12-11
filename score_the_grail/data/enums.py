@@ -18,12 +18,21 @@ class NormativeData(Enum):
             raise ValueError(f"Invalid normative data file: {self}")
 
     @property
+    def std_file_path(self) -> str | None:
+        if self == NormativeData.NORMAL:
+            return "./normative_normal_std.csv"
+        elif self == NormativeData.CROUCHGAIT:
+            return None
+        else:
+            raise ValueError(f"Invalid normative data file: {self}")
+
+    @property
     def factory(self) -> Callable:
         from .kinematic import KinematicData
 
         if self == NormativeData.NORMAL:
             return KinematicData.from_normative_csv
         elif self == NormativeData.CROUCHGAIT:
-            return KinematicData.from_txt
+            return KinematicData.from_normative_txt
         else:
             raise ValueError(f"Invalid normative data file: {self}")

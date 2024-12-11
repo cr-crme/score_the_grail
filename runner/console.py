@@ -22,8 +22,15 @@ def main():
         for i, side in enumerate(sides):
             plt.subplot(len(dofs_to_plot), 2, 2 * j + i + 1)
             plt.title(side)
+            plt.fill_between(
+                range(len(kd_normative.get_side(side)[dof].to_numpy)),
+                kd_normative.get_side(side)[dof].to_numpy - kd_normative.get_side(side)[dof].std_to_numpy,
+                kd_normative.get_side(side)[dof].to_numpy + kd_normative.get_side(side)[dof].std_to_numpy,
+                color="k",
+                alpha=0.3,
+            )
+            plt.plot(kd_normative.get_side(side)[dof].to_numpy, color="k")
             plt.plot(kd_exported_normalized.get_side(side)[dof].to_numpy, linestyle="--", color="b")
-            plt.plot(kd_normative.get_side(side)[dof].to_numpy, linestyle="-", color="k")
             y_lims.append(plt.ylim())
         new_y_lim = (min([y[0] for y in y_lims]), max([y[1] for y in y_lims]))
         for i in range(len(sides)):

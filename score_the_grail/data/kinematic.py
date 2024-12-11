@@ -33,7 +33,9 @@ def _channels_map() -> dict[str, tuple[str]]:
 
 class KinematicData:
 
-    def __init__(self, data: dict[str, np.ndarray], channel_names: tuple[str]) -> None:
+    def __init__(
+        self, data: dict[str, np.ndarray], channel_names: tuple[str], data_std: dict[str, np.ndarray] | None = None
+    ) -> None:
         """
         Create a new KinematicData object.
 
@@ -43,13 +45,24 @@ class KinematicData:
             The kinematic data (time, channel, step) for the sides (str).
         channel_names : tuple[str]
             The names of the channels.
+        data_std : dict[str, np.ndarray] | None
+            The standard deviation of the kinematic data
 
         """
         for value in data.values():
             if value.ndim != 3:
                 raise ValueError("The data must be a 3D array (time, channel, step).")
 
+        if data_std is None:
+            data_std = {side: np.zeros_like(data[side]) for side in data.keys()}
+        for side in data.keys():
+            if side not in data_std:
+                raise ValueError("The standard deviation must have the same sides as the data.")
+            if data[side].shape != data_std[side].shape:
+                raise ValueError("The data and standard deviation must have the same shape.")
+
         self._data = data
+        self._data_std = data_std
         self._channel_names = channel_names
 
     def keys(self) -> list:
@@ -112,6 +125,18 @@ class KinematicData:
         return self._data[self.side_names[0]].squeeze()
 
     @property
+    def std_to_numpy(self) -> np.ndarray:
+        """
+        The standard deviation data as numpy array.
+        """
+        if len(self.side_names) > 1:
+            raise ValueError(
+                "It is not possible to merge the data with more than one side. "
+                "Please call '.left' or '.right' before calling '.to_numpy'."
+            )
+        return self._data_std[self.side_names[0]].squeeze()
+
+    @property
     def channel_names(self) -> tuple[str]:
         """
         The names of the channels.
@@ -147,6 +172,7 @@ class KinematicData:
         return KinematicData(
             data={side: self._data[side].mean(axis=0)[None, :, :] for side in self.side_names},
             channel_names=self._channel_names,
+            data_std={side: self._data_std[side].mean(axis=0)[None, :, :] for side in self.side_names},
         )
 
     @property
@@ -161,6 +187,7 @@ class KinematicData:
         return KinematicData(
             data={side: self._data[side].mean(axis=2)[:, :, None] for side in self.side_names},
             channel_names=self._channel_names,
+            data_std={side: self._data_std[side].mean(axis=2)[:, :, None] for side in self.side_names},
         )
 
     @property
@@ -208,7 +235,47 @@ class KinematicData:
         if not self.has_side:
             return self
 
-        return KinematicData(data={side: self._data[side]}, channel_names=self._channel_names)
+        return KinematicData(
+            data={side: self._data[side]}, channel_names=self._channel_names, data_std={side: self._data_std[side]}
+        )
+
+    @classmethod
+    def from_mox(cls, file_path: str) -> Self:
+        """
+        Extract the data from the MOX file directly output from the GRAIL software.
+
+        Parameters
+        ----------
+        file_path : str
+            The path to the MOX file containing the kinematic data.
+
+        Returns
+        -------
+        KinematicData
+            The kinematic data extracted from the file.
+        """
+        with open(file_path) as f:
+            raw_data = xmltodict.parse(f.read())
+
+        frame_count = int(raw_data["moxie_viewer_datafile"]["viewer_header"]["nr_of_samples"])
+
+        channels_to_keep = list(_channels_map()["all"]["grail_names"])
+        header = []
+        data = np.ndarray((frame_count, 0))
+        for channel in raw_data["moxie_viewer_datafile"]["viewer_data"]["viewer_channel"]:
+            if channel["channel_label"] in channels_to_keep:
+                header.append(channel["channel_label"])
+                data = np.hstack(
+                    (data, np.array(str(channel["raw_channel_data"]["channel_data"]).split(" "), dtype=float)[:, None])
+                )
+
+        # Reorganise and reshape the data into a 4D array
+        data = pd.DataFrame(data, columns=header)[channels_to_keep].to_numpy()[:, :, None]
+
+        try:
+            return cls(data={"both": data}, channel_names=_channels_map()["all"]["show_names"])
+        except KeyError:
+            raise ValueError("The MOX file does not contain all the expected channels.")
 
     @classmethod
     def from_csv(cls, file_path: str) -> Self:
@@ -287,7 +354,7 @@ class KinematicData:
         return cls(data=data, channel_names=_channels_map()["split"]["show_names"])
 
     @classmethod
-    def from_normative_csv(cls, file_path: str) -> Self:
+    def from_normative_csv(cls, file_path: str, std_file_path: str | None) -> Self:
         """
         Extract the data provided by MOTEK for the normative data.
 
@@ -295,6 +362,8 @@ class KinematicData:
         ----------
         file_path : str
             The path to the CSV file containing the kinematic data.
+        std_file_path : str | None
+            The path to the CSV file containing the standard deviation of the kinematic data, if available.
 
         Returns
         -------
@@ -306,8 +375,18 @@ class KinematicData:
         # Replace the headers from "Type Dof SideCycle" to "Type SDof" where S is the side (L or R)
         header: list[str] = list(raw_data[0, :])
         generic_header_to_keep = list(_channels_map()["all"]["normalized_names"])
+        has_std_data = std_file_path is not None
+        if has_std_data:
+            raw_data_std = pd.read_csv(std_file_path, header=None).to_numpy()
+            header_std = list(raw_data_std[0, :])
+            if header != header_std:
+                raise ValueError("The CSV files do not contain the same headers.")
+            # From that point on, we can assume that the headers are the same, so we treat them the same way
 
         data = {}
+        data_std = None
+        if has_std_data:
+            data_std = {}
         for side in ["left", "right"]:
             # Find the index of the header that correspond to channels to keep for each side
             header_indices = []
@@ -324,49 +403,13 @@ class KinematicData:
                     raise ValueError("The CSV file does not contain all the expected channels.")
 
             data[side] = np.array(raw_data[1:, header_indices], dtype=float)[:, :, None]
+            if has_std_data:
+                data_std[side] = np.array(raw_data_std[1:, header_indices], dtype=float)[:, :, None]
 
-        return cls(data=data, channel_names=_channels_map()["split"]["show_names"])
-
-    @classmethod
-    def from_mox(cls, file_path: str) -> Self:
-        """
-        Extract the data from the MOX file directly output from the GRAIL software.
-
-        Parameters
-        ----------
-        file_path : str
-            The path to the MOX file containing the kinematic data.
-
-        Returns
-        -------
-        KinematicData
-            The kinematic data extracted from the file.
-        """
-        with open(file_path) as f:
-            raw_data = xmltodict.parse(f.read())
-
-        frame_count = int(raw_data["moxie_viewer_datafile"]["viewer_header"]["nr_of_samples"])
-
-        channels_to_keep = list(_channels_map()["all"]["grail_names"])
-        header = []
-        data = np.ndarray((frame_count, 0))
-        for channel in raw_data["moxie_viewer_datafile"]["viewer_data"]["viewer_channel"]:
-            if channel["channel_label"] in channels_to_keep:
-                header.append(channel["channel_label"])
-                data = np.hstack(
-                    (data, np.array(str(channel["raw_channel_data"]["channel_data"]).split(" "), dtype=float)[:, None])
-                )
-
-        # Reorganise and reshape the data into a 4D array
-        data = pd.DataFrame(data, columns=header)[channels_to_keep].to_numpy()[:, :, None]
-
-        try:
-            return cls(data={"both": data}, channel_names=_channels_map()["all"]["show_names"])
-        except KeyError:
-            raise ValueError("The MOX file does not contain all the expected channels.")
+        return cls(data=data, channel_names=_channels_map()["split"]["show_names"], data_std=data_std)
 
     @classmethod
-    def from_txt(cls, file_path: str) -> Self:
+    def from_normative_txt(cls, file_path: str, std_file_path: str | None) -> Self:
         """
         Create a KinematicData object from the txt data file.
 
@@ -377,12 +420,17 @@ class KinematicData:
         ----------
         file_path : str
             The path to the TXT file containing the kinematic data.
+        std_file_path : str | None
+            The path to the TXT file containing the standard deviation of the kinematic data, if available.
 
         Returns
         -------
         KinematicData
             The kinematic data extracted from the file
         """
+
+        if std_file_path is not None:
+            raise NotImplementedError("The standard deviation is not implemented yet for TXT files.")
 
         # The normative file is next to the current file
         with open(file_path) as f:
@@ -420,7 +468,10 @@ class KinematicData:
         """
 
         # The normative file is next to the current file
-        return file.factory(Path(__file__).parent / file.file_path)
+        root_folder = Path(__file__).parent
+        file_path = root_folder / file.file_path
+        std_file_path = None if file.std_file_path is None else (root_folder / file.std_file_path)
+        return file.factory(file_path=file_path, std_file_path=std_file_path)
 
     def __getitem__(self, key: str) -> Self:
         if key not in self.channel_names:
@@ -430,6 +481,7 @@ class KinematicData:
         return KinematicData(
             data={side: self._data[side][:, index : index + 1, :] for side in self.side_names},
             channel_names=(key,),
+            data_std={side: self._data_std[side][:, index : index + 1, :] for side in self.side_names},
         )
 
     def __add__(self, other: Self) -> Self:
