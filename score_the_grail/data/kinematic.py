@@ -1,3 +1,5 @@
+import io
+import os
 from typing import Self
 from pathlib import Path
 
@@ -6,6 +8,7 @@ import pandas as pd
 import numpy as np
 
 from .enums import NormativeData
+from .file_io import FileReader
 
 
 def _channels_map() -> dict[str, tuple[str]]:
@@ -278,7 +281,7 @@ class KinematicData:
             raise ValueError("The MOX file does not contain all the expected channels.")
 
     @classmethod
-    def from_csv(cls, file_path: str) -> Self:
+    def from_csv(cls, file_path: str, encryption_key: str | None = None) -> Self:
         """
         Extract the data from the export of the GOAT software.
 
@@ -286,6 +289,8 @@ class KinematicData:
         ----------
         file_path : str
             The path to the CSV file containing the kinematic data.
+        encryption_key : str, optional
+            The encryption key to decrypt the data, if None is provided, the data is assumed to be unencrypted.
 
         Returns
         -------
@@ -293,13 +298,17 @@ class KinematicData:
             The kinematic data extracted from the file.
         """
         try:
+            if encryption_key is not None:
+                decrypted_data = FileReader(encryption_key=encryption_key).read_encrypted_file(file_path)
+                file_path = io.BytesIO(decrypted_data)
+
             data = pd.read_csv(file_path)[list(_channels_map()["all"]["grail_names"])].to_numpy()[:, :, None]
             return cls(data={"both": data}, channel_names=_channels_map()["all"]["show_names"])
         except KeyError:
             raise ValueError("The CSV file does not contain all the expected columns.")
 
     @classmethod
-    def from_normalized_csv(cls, file_path: str) -> Self:
+    def from_normalized_csv(cls, file_path: str, encryption_key: str | None = None) -> Self:
         """
         Extract the data from the export of the GOAT software when normalized is enabled.
 
@@ -314,12 +323,18 @@ class KinematicData:
         ----------
         file_path : str
             The path to the CSV file containing the normalized kinematic data.
+        encryption_key : str, optional
+            The encryption key to decrypt the data, if None is provided, the data is assumed to be unencrypted.
 
         Returns
         -------
         KinematicData
             The kinematic data extracted from the file
         """
+
+        if encryption_key is not None:
+            decrypted_data = FileReader(encryption_key=encryption_key).read_encrypted_file(file_path)
+            file_path = io.BytesIO(decrypted_data)
 
         raw_data = pd.read_csv(file_path, header=None).to_numpy()
 
@@ -354,7 +369,7 @@ class KinematicData:
         return cls(data=data, channel_names=_channels_map()["split"]["show_names"])
 
     @classmethod
-    def from_normative_csv(cls, file_path: str, std_file_path: str | None) -> Self:
+    def from_normative_csv(cls, file_path: str, std_file_path: str | None, encryption_key: str | None = None) -> Self:
         """
         Extract the data provided by MOTEK for the normative data.
 
@@ -364,6 +379,8 @@ class KinematicData:
             The path to the CSV file containing the kinematic data.
         std_file_path : str | None
             The path to the CSV file containing the standard deviation of the kinematic data, if available.
+        encryption_key : str, optional
+            The encryption key to decrypt the data, if None is provided, the data is assumed to be unencrypted.
 
         Returns
         -------
@@ -371,12 +388,20 @@ class KinematicData:
             The kinematic data extracted from the file.
         """
 
+        if encryption_key is not None:
+            decrypted_data = FileReader(encryption_key=encryption_key).read_encrypted_file(file_path)
+            file_path = io.BytesIO(decrypted_data)
+
         raw_data = pd.read_csv(file_path, header=None).to_numpy()
         # Replace the headers from "Type Dof SideCycle" to "Type SDof" where S is the side (L or R)
         header: list[str] = list(raw_data[0, :])
         generic_header_to_keep = list(_channels_map()["all"]["normalized_names"])
         has_std_data = std_file_path is not None
         if has_std_data:
+            if encryption_key is not None:
+                decrypted_std_data = FileReader(encryption_key=encryption_key).read_encrypted_file(std_file_path)
+                std_file_path = io.BytesIO(decrypted_std_data)
+
             raw_data_std = pd.read_csv(std_file_path, header=None).to_numpy()
             header_std = list(raw_data_std[0, :])
             if header != header_std:
@@ -409,7 +434,7 @@ class KinematicData:
         return cls(data=data, channel_names=_channels_map()["split"]["show_names"], data_std=data_std)
 
     @classmethod
-    def from_normative_txt(cls, file_path: str, std_file_path: str | None) -> Self:
+    def from_normative_txt(cls, file_path: str, std_file_path: str | None, encryption_key: str | None = None) -> Self:
         """
         Create a KinematicData object from the txt data file.
 
@@ -422,6 +447,8 @@ class KinematicData:
             The path to the TXT file containing the kinematic data.
         std_file_path : str | None
             The path to the TXT file containing the standard deviation of the kinematic data, if available.
+        encryption_key : str, optional
+            The encryption key to decrypt the data, if None is provided, the data is assumed to be unencrypted.
 
         Returns
         -------
@@ -433,8 +460,14 @@ class KinematicData:
             raise NotImplementedError("The standard deviation is not implemented yet for TXT files.")
 
         # The normative file is next to the current file
-        with open(file_path) as f:
-            all_lines = f.readlines()
+        if encryption_key is not None:
+            decrypted_data = FileReader(encryption_key=encryption_key).read_encrypted_file(file_path)
+            decrypted_text = decrypted_data.decode("utf-8")
+            data_stream = io.StringIO(decrypted_text)
+            all_lines = data_stream.readlines()
+        else:
+            with open(file_path) as f:
+                all_lines = f.readlines()
         all_lines = [line.strip() for line in all_lines]  # Remove the nextline character
 
         trial_index = 1  # 1 for the next line after the header index. Should we use mean of all trials?
@@ -451,6 +484,52 @@ class KinematicData:
         # Recast the data into a DataFrame
         return cls(data=data, channel_names=_channels_map()["split"]["show_names"])
 
+    def from_mox(cls, file_path: str, encryption_key: str | None = None) -> Self:
+        """
+        Extract the data from the MOX file directly output from the GRAIL software.
+
+        Parameters
+        ----------
+        file_path : str
+            The path to the MOX file containing the kinematic data.
+        encryption_key : str, optional
+            The encryption key to decrypt the data, if None is provided, the data is assumed to be unencrypted.
+
+        Returns
+        -------
+        KinematicData
+            The kinematic data extracted from the file.
+        """
+
+        if encryption_key is not None:
+            decrypted_data = FileReader(encryption_key=encryption_key).read_encrypted_file(file_path)
+            decrypted_text = decrypted_data.decode("utf-8")
+            data_stream = io.StringIO(decrypted_text)
+            raw_data = xmltodict.parse(data_stream.read())
+        else:
+            with open(file_path) as f:
+                raw_data = xmltodict.parse(f.read())
+
+        frame_count = int(raw_data["moxie_viewer_datafile"]["viewer_header"]["nr_of_samples"])
+
+        channels_to_keep = list(_channels_map()["all"]["grail_names"])
+        header = []
+        data = np.ndarray((frame_count, 0))
+        for channel in raw_data["moxie_viewer_datafile"]["viewer_data"]["viewer_channel"]:
+            if channel["channel_label"] in channels_to_keep:
+                header.append(channel["channel_label"])
+                data = np.hstack(
+                    (data, np.array(str(channel["raw_channel_data"]["channel_data"]).split(" "), dtype=float)[:, None])
+                )
+
+        # Reorganise and reshape the data into a 4D array
+        data = pd.DataFrame(data, columns=header)[channels_to_keep].to_numpy()[:, :, None]
+
+        try:
+            return cls(data={"both": data}, channel_names=_channels_map()["all"]["show_names"])
+        except KeyError:
+            raise ValueError("The MOX file does not contain all the expected channels.")
+
     @classmethod
     def from_normative_data(cls, file: NormativeData) -> Self:
         """
@@ -459,19 +538,26 @@ class KinematicData:
         Parameters
         ----------
         file : NormativeData
-            The normative data file to load
+            The normative data file to load=
 
         Returns
         -------
         KinematicData
             The kinematic data extracted from the file
         """
+        key = os.environ["NORMATIVE_GRAIL_DATA_KEY"] if "NORMATIVE_GRAIL_DATA_KEY" in os.environ else None
+        if key is None:
+            raise ValueError(
+                "The encryption key is not found. Please set the environment variable "
+                "NORMATIVE_GRAIL_DATA_KEY with the encryption key. If you do not have one, "
+                "please contact the owner of this repo to get one."
+            )
 
         # The normative file is next to the current file
         root_folder = Path(__file__).parent
         file_path = root_folder / file.file_path
         std_file_path = None if file.std_file_path is None else (root_folder / file.std_file_path)
-        return file.factory(file_path=file_path, std_file_path=std_file_path)
+        return file.factory(file_path=file_path, std_file_path=std_file_path, encryption_key=key)
 
     def __getitem__(self, key: str) -> Self:
         if key not in self.channel_names:

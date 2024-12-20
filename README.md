@@ -32,3 +32,10 @@ A simple GUI application to compute walking score (MAP and GPS) using the GRAIL
 
     The executable will be generated in the `$ROOT/runner/dist` folder.
 
+## Normative data
+
+The normative data were happily provided by the GRAIL team. 
+They are stored in the `data` folder as encrypted files.
+To decrypt the data, one must set the `NORMATIVE_GRAIL_DATA_KEY` environment variable to the key provided. 
+To get a key, please contact us at `pariterre@hotmail.com`.
+

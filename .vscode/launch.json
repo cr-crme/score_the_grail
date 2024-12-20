@@ -12,6 +12,7 @@
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/runner/",
             "justMyCode": true,
+            "envFile": "${workspaceFolder}/.vscode/.env",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             }
@@ -24,6 +25,7 @@
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/runner/",
             "justMyCode": true,
+            "envFile": "${workspaceFolder}/.vscode/.env",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             }
@@ -36,10 +38,23 @@
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/runner/",
             "justMyCode": true,
+            "envFile": "${workspaceFolder}/.vscode/.env",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             }
         },
-        
+        {
+            "name": "Encrypt normative data",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/runner/data_encryption.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/runner/",
+            "justMyCode": true,
+            "envFile": "${workspaceFolder}/.vscode/.env",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
     ]
 }

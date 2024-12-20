@@ -11,16 +11,16 @@ class NormativeData(Enum):
     @property
     def file_path(self) -> str:
         if self == NormativeData.NORMAL:
-            return "./normative_normal.csv"
+            return "./normative_normal.csv.encrypted"
         elif self == NormativeData.CROUCHGAIT:
-            return "./normative_crouchgait.txt"
+            return "./normative_crouchgait.txt.encrypted"
         else:
             raise ValueError(f"Invalid normative data file: {self}")
 
     @property
     def std_file_path(self) -> str | None:
         if self == NormativeData.NORMAL:
-            return "./normative_normal_std.csv"
+            return "./normative_normal_std.csv.encrypted"
         elif self == NormativeData.CROUCHGAIT:
             return None
         else:
